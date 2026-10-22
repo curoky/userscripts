@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         GitHub Trending Language Priorities
 // @namespace    https://github.com/curoky/userscripts
-// @version      0.2.0
+// @version      0.2.1
 // @description  Move preferred languages to the top of the GitHub Trending language menu.
 // @author       curoky
 // @homepageURL  https://github.com/curoky/userscripts
 // @supportURL   https://github.com/curoky/userscripts/issues
-// @downloadURL  https://raw.githubusercontent.com/curoky/userscripts/main/dist/github-trending-language-priorities.user.js
-// @updateURL    https://raw.githubusercontent.com/curoky/userscripts/main/dist/github-trending-language-priorities.user.js
+// @downloadURL  https://raw.githubusercontent.com/curoky/userscripts/master/dist/github-trending-language-priorities.user.js
+// @updateURL    https://raw.githubusercontent.com/curoky/userscripts/master/dist/github-trending-language-priorities.user.js
 // @match        https://github.com/trending*
 // @grant        none
 // @run-at       document-idle

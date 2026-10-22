@@ -3,13 +3,13 @@ import { defineConfig } from "tsdown";
 const metadata = `// ==UserScript==
 // @name         GitHub Trending Blacklist
 // @namespace    https://github.com/curoky/userscripts
-// @version      0.1.1
+// @version      0.1.2
 // @description  Hide repositories you do not want to see on GitHub Trending.
 // @author       curoky
 // @homepageURL  https://github.com/curoky/userscripts
 // @supportURL   https://github.com/curoky/userscripts/issues
-// @downloadURL  https://raw.githubusercontent.com/curoky/userscripts/main/dist/github-trending-blacklist.user.js
-// @updateURL    https://raw.githubusercontent.com/curoky/userscripts/main/dist/github-trending-blacklist.user.js
+// @downloadURL  https://raw.githubusercontent.com/curoky/userscripts/master/dist/github-trending-blacklist.user.js
+// @updateURL    https://raw.githubusercontent.com/curoky/userscripts/master/dist/github-trending-blacklist.user.js
 // @match        https://github.com/trending*
 // @grant        GM_getValue
 // @grant        GM_setValue

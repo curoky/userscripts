@@ -32,6 +32,7 @@
 
 ## Repository conventions
 
+- 默认分支固定为 `master`；CI 和 userscript 的 raw GitHub URL 必须使用该分支。
 - metadata 的 `@match` 和 `@grant` 保持最小范围；`@name` 与 `@namespace` 发布后保持稳定。
 - metadata 中的 `@version` 是各脚本版本的唯一来源，按 SemVer 更新。
 - 不使用远程代码、外部 CDN 或 `eval`；除非功能明确需要，不新增网络请求与 `@connect`。
