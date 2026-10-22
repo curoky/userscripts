@@ -10,18 +10,15 @@
   "scripts": {
     "audit": "pnpm audit --audit-level high",
     "build": "tsdown",
-    "check": "pnpm lint && pnpm typecheck && pnpm test:run && pnpm build",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "format": "biome check --write .",
     "lint": "biome ci .",
     "prepare": "lefthook install",
-    "test": "vitest",
-    "test:run": "vitest run",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",
-    "@commitlint/cli": "21.2.4",
-    "@commitlint/config-conventional": "21.2.4",
     "@types/firefox-webext-browser": "143.0.1",
     "@violentmonkey/types": "0.3.4",
     "chrome-types": "0.1.457",

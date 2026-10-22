@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { enhanceTrendingPage } from "./ui.js";
+import { enhanceTrendingPage } from "./trending-page.js";
 
 function renderFixture(): void {
   document.body.innerHTML = `

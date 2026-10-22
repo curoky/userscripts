@@ -47,7 +47,21 @@
 	}
 
 //#endregion
-//#region src/github-trending-blacklist/ui.ts
+//#region src/github-trending-blacklist/storage.ts
+	function loadBlacklist() {
+		return decodeBlacklist(GM_getValue("github-trending-blacklist"));
+	}
+	function saveBlacklist(repositories) {
+		GM_setValue("github-trending-blacklist", encodeBlacklist(repositories));
+	}
+	function onRemoteBlacklistChange(listener) {
+		GM_addValueChangeListener("github-trending-blacklist", (_name, _oldValue, newValue, isRemote) => {
+			if (isRemote) listener(decodeBlacklist(newValue));
+		});
+	}
+
+//#endregion
+//#region src/github-trending-blacklist/trending-page.ts
 	function createButton(label) {
 		const button = document.createElement("button");
 		button.type = "button";
@@ -138,35 +152,33 @@
 
 //#endregion
 //#region src/github-trending-blacklist/main.ts
-	let repositories = decodeBlacklist(GM_getValue("github-trending-blacklist"));
+	let repositories = loadBlacklist();
+	function replaceBlacklist(nextRepositories) {
+		saveBlacklist(nextRepositories);
+		repositories = nextRepositories;
+		render();
+	}
+	const actions = {
+		block(repository) {
+			replaceBlacklist(new Set(repositories).add(repository));
+		},
+		clear() {
+			replaceBlacklist(/* @__PURE__ */ new Set());
+		},
+		unblock(repository) {
+			const nextRepositories = new Set(repositories);
+			nextRepositories.delete(repository);
+			replaceBlacklist(nextRepositories);
+		}
+	};
 	function render() {
-		enhanceTrendingPage(repositories, {
-			block(repository) {
-				const nextRepositories = new Set(repositories).add(repository);
-				GM_setValue("github-trending-blacklist", encodeBlacklist(nextRepositories));
-				repositories = nextRepositories;
-				render();
-			},
-			clear() {
-				GM_setValue("github-trending-blacklist", encodeBlacklist(/* @__PURE__ */ new Set()));
-				repositories = /* @__PURE__ */ new Set();
-				render();
-			},
-			unblock(repository) {
-				const nextRepositories = new Set(repositories);
-				nextRepositories.delete(repository);
-				GM_setValue("github-trending-blacklist", encodeBlacklist(nextRepositories));
-				repositories = nextRepositories;
-				render();
-			}
-		});
+		enhanceTrendingPage(repositories, actions);
 	}
 	document.addEventListener("pjax:end", render);
 	document.addEventListener("turbo:render", render);
 	window.addEventListener("popstate", render);
-	GM_addValueChangeListener("github-trending-blacklist", (_name, _oldValue, newValue, isRemote) => {
-		if (!isRemote) return;
-		repositories = decodeBlacklist(newValue);
+	onRemoteBlacklistChange((nextRepositories) => {
+		repositories = nextRepositories;
 		render();
 	});
 	render();
