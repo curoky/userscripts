@@ -37,11 +37,15 @@ describe("prioritizeTrendingLanguages", () => {
       "C++",
       "Java",
       "Go",
+      "Shell",
       "JavaScript",
       "Python",
       "Ruby",
+      "Swift",
       "Rust",
+      "C",
       "TypeScript",
+      "Zig",
     ]);
   });
 
@@ -55,8 +59,12 @@ describe("prioritizeTrendingLanguages", () => {
       "Rust",
       "TypeScript",
       "JavaScript",
-      "Unknown languages",
       "Java",
+      "C",
+      "Zig",
+      "Shell",
+      "Swift",
+      "Unknown languages",
       "Ruby",
     ]);
   });
@@ -66,7 +74,7 @@ describe("prioritizeTrendingLanguages", () => {
 
     prioritizeTrendingLanguages();
 
-    expect(languageNames()).toEqual(["Python", "Go", "Ruby", "Java"]);
+    expect(languageNames()).toEqual(["Python", "Go", "Java", "Ruby"]);
     expect(
       [
         ...document.querySelectorAll(

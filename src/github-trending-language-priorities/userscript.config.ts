@@ -3,7 +3,7 @@ import { defineConfig } from "tsdown";
 const metadata = `// ==UserScript==
 // @name         GitHub Trending Language Priorities
 // @namespace    https://github.com/curoky/userscripts
-// @version      0.1.0
+// @version      0.2.0
 // @description  Move preferred languages to the top of the GitHub Trending language menu.
 // @author       curoky
 // @homepageURL  https://github.com/curoky/userscripts

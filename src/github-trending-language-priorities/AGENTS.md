@@ -5,7 +5,7 @@
 本脚本将常用编程语言移动到 GitHub Trending 的 `Language` 菜单顶部，减少在完整语言列表中的查找成本。优先级固定为：
 
 ```text
-Python → C++ → Go → Rust → TypeScript → JavaScript
+Python → C++ → Go → Rust → TypeScript → JavaScript → Java → C → Zig → Shell → Swift
 ```
 
 未列出的语言保持 GitHub 原有相对顺序。脚本只调整现有 DOM 节点，不复制链接、不修改 URL，也不保存任何数据。

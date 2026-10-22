@@ -23,6 +23,11 @@ export function prioritizeTrendingLanguages(): void {
     "Rust",
     "TypeScript",
     "JavaScript",
+    "Java",
+    "C",
+    "Zig",
+    "Shell",
+    "Swift",
   ].flatMap((language) => {
     const item = itemsByLanguage.get(language);
     return item === undefined ? [] : [item];
