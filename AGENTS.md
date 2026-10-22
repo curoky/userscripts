@@ -7,6 +7,7 @@
 ## Script index
 
 - [GitHub Trending Blacklist](src/github-trending-blacklist/AGENTS.md)：隐藏 GitHub Trending 中不想再看到的 repository。
+- [GitHub Trending Language Priorities](src/github-trending-language-priorities/AGENTS.md)：将常用编程语言移动到 GitHub Trending 语言菜单顶部。
 
 ## Commands
 
