@@ -2,7 +2,7 @@
 
 ## Purpose
 
-本脚本在 `https://github.com/trending` 的每个 repository 卡片上增加 `Block`，并提供查看、逐项恢复和清空黑名单的入口。功能只处理 repository Trending，不处理 `/trending/developers`。
+本脚本在 `https://github.com/trending` 及 `/trending/<language>` 的每个 repository 卡片上增加 `Block`，并提供查看、逐项恢复和清空黑名单的入口。功能只处理 repository Trending，不处理 `/trending/developers`。
 
 ## Module boundaries
 
@@ -45,6 +45,7 @@ userscript.config -> main -> storage -> blacklist
 ## GitHub integration
 
 - repository 卡片选择器为 `article.Box-row`，仓库链接来自 `h2 a[href]`。
+- 页面范围只包含 `/trending` 和 `/trending/<language>`，明确排除 `/trending/developers`。
 - 控件复用 GitHub Primer class，脚本只增加必要的行内布局属性。
 - 页面增强必须幂等，重复执行不能产生重复按钮或管理器。
 - GitHub DOM 不是稳定 API；修改选择器时同步更新 `trending-page.test.ts`，并用当前线上 HTML 做 smoke test。

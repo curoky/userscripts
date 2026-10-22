@@ -41,6 +41,34 @@ describe("enhanceTrendingPage", () => {
     ).not.toBeNull();
   });
 
+  it("enhances language-filtered repository pages", () => {
+    window.history.replaceState({}, "", "/trending/python?since=daily");
+
+    enhanceTrendingPage(new Set(), {
+      block: vi.fn(),
+      clear: vi.fn(),
+      unblock: vi.fn(),
+    });
+
+    expect(
+      document.querySelector("[data-trending-blacklist-block]"),
+    ).not.toBeNull();
+  });
+
+  it("does not enhance the trending developers page", () => {
+    window.history.replaceState({}, "", "/trending/developers");
+
+    enhanceTrendingPage(new Set(), {
+      block: vi.fn(),
+      clear: vi.fn(),
+      unblock: vi.fn(),
+    });
+
+    expect(
+      document.querySelector("[data-trending-blacklist-block]"),
+    ).toBeNull();
+  });
+
   it("hides blocked cards and can request removal", () => {
     const unblock = vi.fn();
 

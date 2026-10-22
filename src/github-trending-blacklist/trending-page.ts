@@ -139,7 +139,13 @@ export function enhanceTrendingPage(
   repositories: ReadonlySet<string>,
   actions: BlacklistActions,
 ): void {
-  if (window.location.pathname !== "/trending") {
+  const pathParts = window.location.pathname.split("/").filter(Boolean);
+
+  if (
+    pathParts[0] !== "trending" ||
+    pathParts.length > 2 ||
+    pathParts[1] === "developers"
+  ) {
     return;
   }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHub Trending Blacklist
 // @namespace    https://github.com/curoky/userscripts
-// @version      0.1.0
+// @version      0.1.1
 // @description  Hide repositories you do not want to see on GitHub Trending.
 // @author       curoky
 // @homepageURL  https://github.com/curoky/userscripts
@@ -137,7 +137,8 @@
 		actionsContainer.prepend(blockButton);
 	}
 	function enhanceTrendingPage(repositories, actions) {
-		if (window.location.pathname !== "/trending") return;
+		const pathParts = window.location.pathname.split("/").filter(Boolean);
+		if (pathParts[0] !== "trending" || pathParts.length > 2 || pathParts[1] === "developers") return;
 		const toolbar = document.querySelector(".Box-header .table-list-header-toggle");
 		if (toolbar !== null) {
 			let manager = toolbar.querySelector("[data-trending-blacklist-manager]");
