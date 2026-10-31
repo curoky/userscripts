@@ -3,8 +3,8 @@ import { defineConfig } from "tsdown";
 const metadata = `// ==UserScript==
 // @name         JD Bill Exporter
 // @namespace    https://github.com/curoky/userscripts
-// @version      0.1.0
-// @description  Export JD orders by year as CSV with explicit split-order relationships and deduplicated totals.
+// @version      0.2.0
+// @description  Export the manually selected JD order year as CSV with split-order relationships and deduplicated totals.
 // @author       curoky
 // @homepageURL  https://github.com/curoky/userscripts
 // @supportURL   https://github.com/curoky/userscripts/issues

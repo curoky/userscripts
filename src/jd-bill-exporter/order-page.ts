@@ -12,11 +12,9 @@ export const selectors = {
   banner: "[class*='splitBanner-']",
   menu: "[class*='selectContainer-']",
   selectedPeriod: "[class*='select-']",
-  periodOption: "[class*='selectList-'] [class*='item-']",
   activePage: "[class*='activePage-']",
   totalPages: "[class*='totalText-']",
   next: "button[class*='nextBtn-']",
-  page: "[class*='pageItem-']",
   status: "[class*='statusCard-']",
   search: "input[class*='input-']",
 } as const;
@@ -98,7 +96,6 @@ export interface PageSnapshot {
   page: number;
   totalPages: number;
   period: string;
-  fingerprint: string;
 }
 
 export function readPage(root: Document = document): PageSnapshot {
@@ -167,7 +164,6 @@ export function readPage(root: Document = document): PageSnapshot {
     page,
     totalPages,
     period,
-    fingerprint: JSON.stringify({ entries, page, totalPages, period }),
   };
 }
 
@@ -189,18 +185,13 @@ export interface Period {
   before: number | null;
 }
 
-export function parsePeriods(labels: string[], currentYear: number): Period[] {
-  const periods: Period[] = [];
-  for (const label of new Set(labels)) {
-    if (label === "今年内订单") {
-      periods.push({ label, year: currentYear, before: null });
-      continue;
-    }
-    const year = /^(\d{4})年订单$/.exec(label);
-    const before = /^(\d{4})前订单$/.exec(label);
-    if (year) periods.push({ label, year: Number(year[1]), before: null });
-    if (before) periods.push({ label, year: null, before: Number(before[1]) });
+export function parsePeriod(label: string, currentYear: number): Period {
+  if (label === "今年内订单") {
+    return { label, year: currentYear, before: null };
   }
-  if (!periods.length) throw new Error("未找到按年筛选的订单选项");
-  return periods;
+  const year = /^(\d{4})年订单$/.exec(label);
+  if (year) return { label, year: Number(year[1]), before: null };
+  const before = /^(\d{4})前订单$/.exec(label);
+  if (before) return { label, year: null, before: Number(before[1]) };
+  throw new Error("请先在京东页面选择“今年内订单”或具体年份，再导出全年账单");
 }

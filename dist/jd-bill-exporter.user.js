@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         JD Bill Exporter
 // @namespace    https://github.com/curoky/userscripts
-// @version      0.1.0
-// @description  Export JD orders by year as CSV with explicit split-order relationships and deduplicated totals.
+// @version      0.2.0
+// @description  Export the manually selected JD order year as CSV with split-order relationships and deduplicated totals.
 // @author       curoky
 // @homepageURL  https://github.com/curoky/userscripts
 // @supportURL   https://github.com/curoky/userscripts/issues
@@ -189,11 +189,9 @@
 		banner: "[class*='splitBanner-']",
 		menu: "[class*='selectContainer-']",
 		selectedPeriod: "[class*='select-']",
-		periodOption: "[class*='selectList-'] [class*='item-']",
 		activePage: "[class*='activePage-']",
 		totalPages: "[class*='totalText-']",
 		next: "button[class*='nextBtn-']",
-		page: "[class*='pageItem-']",
 		status: "[class*='statusCard-']",
 		search: "input[class*='input-']"
 	};
@@ -283,53 +281,37 @@
 			entries,
 			page,
 			totalPages,
-			period,
-			fingerprint: JSON.stringify({
-				entries,
-				page,
-				totalPages,
-				period
-			})
+			period
 		};
 	}
 	function assertAllOrders(root = document) {
 		if (root.querySelector(`${selectors.status}[class*='selected-']`)?.textContent?.trim() !== "全部") throw new Error("请先将京东订单状态筛选切换为“全部”");
 		if (root.querySelector(selectors.search)?.value.trim()) throw new Error("请先清空京东订单搜索条件");
 	}
-	function parsePeriods(labels, currentYear) {
-		const periods = [];
-		for (const label of new Set(labels)) {
-			if (label === "今年内订单") {
-				periods.push({
-					label,
-					year: currentYear,
-					before: null
-				});
-				continue;
-			}
-			const year = /^(\d{4})年订单$/.exec(label);
-			const before = /^(\d{4})前订单$/.exec(label);
-			if (year) periods.push({
-				label,
-				year: Number(year[1]),
-				before: null
-			});
-			if (before) periods.push({
-				label,
-				year: null,
-				before: Number(before[1])
-			});
-		}
-		if (!periods.length) throw new Error("未找到按年筛选的订单选项");
-		return periods;
+	function parsePeriod(label, currentYear) {
+		if (label === "今年内订单") return {
+			label,
+			year: currentYear,
+			before: null
+		};
+		const year = /^(\d{4})年订单$/.exec(label);
+		if (year) return {
+			label,
+			year: Number(year[1]),
+			before: null
+		};
+		const before = /^(\d{4})前订单$/.exec(label);
+		if (before) return {
+			label,
+			year: null,
+			before: Number(before[1])
+		};
+		throw new Error("请先在京东页面选择“今年内订单”或具体年份，再导出全年账单");
 	}
 
 //#endregion
 //#region src/jd-bill-exporter/exporter.ts
-	function checkSignal(signal) {
-		signal.throwIfAborted();
-	}
-	async function waitFor(read, signal, stableMs = 0) {
+	async function waitForPage(read, signal) {
 		return new Promise((resolve, reject) => {
 			let key = "";
 			let stableSince = 0;
@@ -339,7 +321,7 @@
 				clearInterval(timer);
 				signal.removeEventListener("abort", abort);
 				if (error) reject(error);
-				else resolve(value);
+				else if (value) resolve(value);
 			};
 			const abort = () => finish(signal.reason);
 			const tick = () => {
@@ -348,14 +330,10 @@
 					return;
 				}
 				try {
-					checkSignal(signal);
+					signal.throwIfAborted();
 					const value = read();
 					if (value === void 0) {
 						key = "";
-						return;
-					}
-					if (stableMs === 0) {
-						finish(void 0, value);
 						return;
 					}
 					const nextKey = JSON.stringify(value);
@@ -363,7 +341,7 @@
 						key = nextKey;
 						stableSince = performance.now();
 					}
-					if (performance.now() - stableSince >= stableMs) finish(void 0, value);
+					if (performance.now() - stableSince >= 350) finish(void 0, value);
 				} catch (error) {
 					lastError = error instanceof Error ? error.message : String(error);
 					key = "";
@@ -375,31 +353,10 @@
 			else tick();
 		});
 	}
-	function menu() {
-		const element = document.querySelector(selectors.menu);
-		if (!element) throw new Error("未找到京东订单年度筛选菜单");
-		return element;
-	}
-	async function openMenu(signal) {
-		let options = Array.from(menu().querySelectorAll(selectors.periodOption));
-		if (!options.length) {
-			menu().querySelector(selectors.selectedPeriod)?.click();
-			options = await waitFor(() => {
-				const items = Array.from(menu().querySelectorAll(selectors.periodOption));
-				return items.length ? items : void 0;
-			}, signal);
-		}
-		return options;
-	}
-	async function discoverPeriods(signal) {
-		assertAllOrders();
-		const options = await openMenu(signal);
-		const periods = parsePeriods(options.map((option) => option.textContent?.trim() ?? ""), (/* @__PURE__ */ new Date()).getFullYear());
-		menu().querySelector(selectors.selectedPeriod)?.click();
-		return periods;
-	}
-	async function changePage(action, accept, signal) {
-		checkSignal(signal);
+	async function nextPage(previous, signal) {
+		signal.throwIfAborted();
+		const next = document.querySelector(selectors.next);
+		if (!next || next.disabled) throw new Error("尚未到最后一页，但下一页按钮不可用");
 		const started = performance.now();
 		let requestComplete = false;
 		const observer = new PerformanceObserver((list) => {
@@ -410,31 +367,16 @@
 		});
 		observer.observe({ type: "resource" });
 		try {
-			action();
-			return await waitFor(() => {
+			next.click();
+			return await waitForPage(() => {
 				assertAllOrders();
 				if (!requestComplete) return void 0;
 				const snapshot = readPage();
-				return accept(snapshot) ? snapshot : void 0;
-			}, signal, 350);
+				return snapshot.page === previous.page + 1 ? snapshot : void 0;
+			}, signal);
 		} finally {
 			observer.disconnect();
 		}
-	}
-	async function firstPage(period, signal) {
-		const current = await waitFor(() => {
-			assertAllOrders();
-			return readPage();
-		}, signal, 350);
-		if (current.period !== period.label) {
-			const option = (await openMenu(signal)).find((item) => item.textContent?.trim() === period.label);
-			if (!option) throw new Error(`京东未提供年度筛选：${period.label}`);
-			return changePage(() => option.click(), (snapshot) => snapshot.period === period.label && snapshot.page === 1, signal);
-		}
-		if (current.page === 1) return current;
-		const one = Array.from(document.querySelectorAll(selectors.page)).find((item) => item.textContent?.trim() === "1");
-		if (!one) throw new Error("未找到第一页按钮，请手动返回第一页后重试");
-		return changePage(() => one.click(), (snapshot) => snapshot.page === 1 && snapshot.period === period.label, signal);
 	}
 	function validateYear(snapshot, period) {
 		for (const entry of snapshot.entries) {
@@ -442,13 +384,17 @@
 			if (period.year !== null && year !== period.year || period.before !== null && year >= period.before) throw new Error(`年度筛选与订单 ${entry.id} 的下单年份不符，已停止导出`);
 		}
 	}
-	async function collectPeriod(period, signal, progress) {
+	async function collectCurrentPeriod(signal, progress) {
+		signal.throwIfAborted();
+		assertAllOrders();
+		let snapshot = readPage();
+		const period = parsePeriod(snapshot.period, (/* @__PURE__ */ new Date()).getFullYear());
+		if (snapshot.page !== 1) throw new Error("请先在京东页面回到第一页，再导出当前年度");
 		const ledger = new OrderLedger();
-		let snapshot = await firstPage(period, signal);
 		const totalPages = snapshot.totalPages;
 		const visited = /* @__PURE__ */ new Set();
 		for (let page = 1; page <= totalPages; page++) {
-			checkSignal(signal);
+			signal.throwIfAborted();
 			assertAllOrders();
 			if (snapshot.page !== page || snapshot.totalPages !== totalPages || snapshot.period !== period.label) throw new Error("订单筛选或总页数在导出期间发生变化，请重新导出");
 			validateYear(snapshot, period);
@@ -458,9 +404,7 @@
 			ledger.add(snapshot.entries);
 			progress(`${period.label}：第 ${page}/${totalPages} 页，已读取 ${ledger.orders.size} 个订单`);
 			if (page === totalPages) break;
-			const next = document.querySelector(selectors.next);
-			if (!next || next.disabled) throw new Error("尚未到最后一页，但下一页按钮不可用");
-			snapshot = await changePage(() => next.click(), (result) => result.page === page + 1 && result.period === period.label, signal);
+			snapshot = await nextPage(snapshot, signal);
 		}
 		const files = exportYears(ledger);
 		if (!files.length && period.year !== null) return [{
@@ -475,7 +419,7 @@
 
 //#endregion
 //#region src/jd-bill-exporter/style.css.txt
-	var style_css_default = "/* Bundled as a text asset into the single userscript. */\n#jd-bill-exporter {\n  position: fixed;\n  right: 20px;\n  bottom: 20px;\n  z-index: 99999;\n  width: min(370px, calc(100vw - 40px));\n  color: #222;\n  background: #fff;\n  border: 1px solid #ddd;\n  border-radius: 10px;\n  box-shadow: 0 5px 24px #0002;\n  font:\n    14px / 1.6 system-ui,\n    sans-serif;\n}\n\n#jd-bill-exporter summary {\n  padding: 10px 14px;\n  font-weight: 700;\n  cursor: pointer;\n}\n\n#jd-bill-exporter .jd-export-body {\n  padding: 0 14px 14px;\n}\n\n#jd-bill-exporter select {\n  width: 100%;\n  margin: 4px 0 10px;\n  padding: 6px;\n  color: #222;\n  background: #fff;\n  border: 1px solid #bbb;\n  border-radius: 4px;\n}\n\n#jd-bill-exporter .jd-export-actions {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 8px;\n}\n\n#jd-bill-exporter button {\n  padding: 5px 9px;\n  color: #222;\n  background: #fafafa;\n  border: 1px solid #bbb;\n  border-radius: 4px;\n  cursor: pointer;\n}\n\n#jd-bill-exporter button[data-action=\"start\"] {\n  color: white;\n  background: #c92324;\n  border-color: #c92324;\n}\n\n#jd-bill-exporter button:disabled {\n  opacity: 0.5;\n  cursor: default;\n}\n\n#jd-bill-exporter p {\n  margin: 8px 0;\n}\n\n#jd-bill-exporter .jd-export-hint {\n  color: #666;\n  font-size: 12px;\n}\n\n#jd-bill-exporter .jd-export-downloads {\n  display: grid;\n  gap: 6px;\n  max-height: 180px;\n  overflow: auto;\n}\n\n#jd-bill-exporter a {\n  color: #a31617;\n  text-decoration: underline;\n}\n";
+	var style_css_default = "/* Bundled as a text asset into the single userscript. */\n#jd-bill-exporter {\n  position: fixed;\n  right: 20px;\n  bottom: 20px;\n  z-index: 99999;\n  width: min(370px, calc(100vw - 40px));\n  color: #222;\n  background: #fff;\n  border: 1px solid #ddd;\n  border-radius: 10px;\n  box-shadow: 0 5px 24px #0002;\n  font:\n    14px / 1.6 system-ui,\n    sans-serif;\n}\n\n#jd-bill-exporter summary {\n  padding: 10px 14px;\n  font-weight: 700;\n  cursor: pointer;\n}\n\n#jd-bill-exporter .jd-export-body {\n  padding: 0 14px 14px;\n}\n\n#jd-bill-exporter .jd-export-actions {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 8px;\n}\n\n#jd-bill-exporter button {\n  padding: 5px 9px;\n  color: #222;\n  background: #fafafa;\n  border: 1px solid #bbb;\n  border-radius: 4px;\n  cursor: pointer;\n}\n\n#jd-bill-exporter button[data-action=\"start\"] {\n  color: white;\n  background: #c92324;\n  border-color: #c92324;\n}\n\n#jd-bill-exporter button:disabled {\n  opacity: 0.5;\n  cursor: default;\n}\n\n#jd-bill-exporter p {\n  margin: 8px 0;\n}\n\n#jd-bill-exporter .jd-export-hint {\n  color: #666;\n  font-size: 12px;\n}\n\n#jd-bill-exporter .jd-export-downloads {\n  display: grid;\n  gap: 6px;\n  max-height: 180px;\n  overflow: auto;\n}\n\n#jd-bill-exporter a {\n  color: #a31617;\n  text-decoration: underline;\n}\n";
 
 //#endregion
 //#region src/jd-bill-exporter/main.ts
@@ -491,93 +435,62 @@
     <details open>
       <summary>JD 年度账单导出</summary>
       <div class="jd-export-body">
-        <label>导出年度 <select aria-label="导出年度"></select></label>
         <div class="jd-export-actions">
-          <button type="button" data-action="years">读取可选年份</button>
-          <button type="button" data-action="start">生成 CSV</button>
+          <button type="button" data-action="start">导出当前年度 CSV</button>
           <button type="button" data-action="cancel" disabled>取消</button>
         </div>
-        <p class="jd-export-hint">自动读取全部分页，拆单保留父子关系。导出期间请保持此页打开。</p>
+        <p class="jd-export-hint">先在京东页面选择年度并回到第一页。脚本自动翻页，保留拆单父子关系。</p>
         <p class="jd-export-hint">汇总订单金额只计父单一次；含取消订单，未扣退款。</p>
         <p role="status" aria-live="polite">就绪</p>
         <div class="jd-export-downloads"></div>
       </div>
     </details>`;
-		const select = host.querySelector("select");
-		const years = host.querySelector("[data-action='years']");
 		const start = host.querySelector("[data-action='start']");
 		const cancel = host.querySelector("[data-action='cancel']");
 		const status = host.querySelector("[role='status']");
 		const downloads = host.querySelector(".jd-export-downloads");
-		if (!select || !years || !start || !cancel || !status || !downloads) return;
-		const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
-		select.add(new Option(`${currentYear} 年`, String(currentYear)));
-		select.add(new Option("全部年份（每年一个文件）", "all"));
+		if (!start || !cancel || !status || !downloads) return;
 		let controller;
 		const urls = [];
 		const report = (message) => {
 			status.textContent = message;
 		};
 		const busy = (value) => {
-			select.disabled = value;
-			years.disabled = value;
 			start.disabled = value;
 			cancel.disabled = !value;
 		};
-		const populate = (periods) => {
-			const selected = select.value;
-			select.replaceChildren(new Option("全部年份（每年一个文件）", "all"));
-			for (const period of periods) select.add(new Option(period.label, period.year === null ? "before" : String(period.year)));
-			select.value = selected;
-			if (!select.value) select.value = String(currentYear);
-		};
-		const run = async (exportData) => {
+		const run = async () => {
 			if (controller) return;
 			controller = new AbortController();
 			const signal = controller.signal;
-			const selected = select.value;
-			let completed = 0;
-			let mismatches = 0;
 			busy(true);
-			report("正在读取京东年度筛选…");
+			report("正在读取当前年度订单…");
 			try {
-				const periods = await discoverPeriods(signal);
-				populate(periods);
-				if (!exportData) {
-					report("可选年份已更新");
-					return;
-				}
-				const queue = periods.filter((period) => selected === "all" || (selected === "before" ? period.before !== null : period.year === Number(selected)));
-				if (!queue.length) throw new Error("京东未提供所选年份，请读取可选年份后重试");
 				for (const url of urls) URL.revokeObjectURL(url);
 				urls.length = 0;
 				downloads.replaceChildren();
-				for (const period of queue) {
-					const files = await collectPeriod(period, signal, (message) => report(`${completed ? `已生成 ${completed} 个年度文件。` : ""}${message}`));
-					signal.throwIfAborted();
-					for (const file of files) {
-						const url = URL.createObjectURL(new Blob([file.csv], { type: "text/csv;charset=utf-8" }));
-						urls.push(url);
-						const link = document.createElement("a");
-						link.href = url;
-						link.download = `jd-orders-${file.year}.csv`;
-						link.textContent = `下载 ${file.year} CSV（${file.orders} 单，${file.splitGroups} 组拆单${file.mismatches ? `，${file.mismatches} 组金额待核对` : ""}）`;
-						downloads.append(link);
-						completed++;
-						mismatches += file.mismatches;
-					}
+				const files = await collectCurrentPeriod(signal, report);
+				signal.throwIfAborted();
+				for (const file of files) {
+					const url = URL.createObjectURL(new Blob([file.csv], { type: "text/csv;charset=utf-8" }));
+					urls.push(url);
+					const link = document.createElement("a");
+					link.href = url;
+					link.download = `jd-orders-${file.year}.csv`;
+					link.textContent = `下载 ${file.year} CSV（${file.orders} 单，${file.splitGroups} 组拆单${file.mismatches ? `，${file.mismatches} 组金额待核对` : ""}）`;
+					downloads.append(link);
 				}
-				report(completed ? `完成：${completed} 个年度文件，请点击下方链接下载${mismatches ? `；${mismatches} 组父子金额不一致，已在 CSV 标记` : ""}。` : "所选年度范围没有订单");
+				const mismatches = files.reduce((sum, file) => sum + file.mismatches, 0);
+				report(files.length ? `完成，请点击下方链接下载${mismatches ? `；${mismatches} 组父子金额不一致，已在 CSV 标记` : ""}。` : "当前筛选没有订单");
 			} catch (error) {
 				const message = signal.aborted ? "已取消，当前未完成年度不会生成文件" : `导出停止：${error instanceof Error ? error.message : String(error)}`;
-				report(`${message}${completed ? `；已完成的 ${completed} 个文件仍可下载` : ""}`);
+				report(message);
 			} finally {
 				controller = void 0;
 				busy(false);
 			}
 		};
-		years.addEventListener("click", () => void run(false));
-		start.addEventListener("click", () => void run(true));
+		start.addEventListener("click", () => void run());
 		cancel.addEventListener("click", () => controller?.abort(new DOMException("用户取消", "AbortError")));
 		document.body.append(host);
 	}

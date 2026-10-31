@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { assertAllOrders, parsePeriods, readPage } from "./order-page.js";
+import { assertAllOrders, parsePeriod, readPage } from "./order-page.js";
 
 const card = (id: string, split: boolean, price = "0.00") => `
   <div class="orderCard-newhash">
@@ -90,16 +90,19 @@ describe("JD current card layout", () => {
     expect(() => assertAllOrders()).toThrow("全部");
   });
 
-  it("recognizes full years and the older combined period but excludes recent months", () => {
+  it("recognizes the manually selected full year or older combined period", () => {
     expect(
-      parsePeriods(
-        ["近3个月订单", "今年内订单", "2025年订单", "2014前订单", "2025年订单"],
-        2026,
+      ["今年内订单", "2025年订单", "2014前订单"].map((label) =>
+        parsePeriod(label, 2026),
       ),
     ).toEqual([
       { label: "今年内订单", year: 2026, before: null },
       { label: "2025年订单", year: 2025, before: null },
       { label: "2014前订单", year: null, before: 2014 },
     ]);
+  });
+
+  it("rejects recent-month filters instead of presenting them as a full year", () => {
+    expect(() => parsePeriod("近3个月订单", 2026)).toThrow("先在京东页面选择");
   });
 });

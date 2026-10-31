@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { collectPeriod, discoverPeriods } from "./exporter.js";
+import { collectCurrentPeriod } from "./exporter.js";
 
 let notifyResource: (() => void) | undefined;
 const item = (id: string, amount: string, split = false) => `
@@ -62,7 +62,7 @@ beforeEach(() => {
   );
   document.body.innerHTML = `
     <div class="statusCard-test selected-test">全部</div><input class="input-test">
-    <div class="selectContainer-test"><div class="select-test">今年内订单</div></div>
+    <div class="selectContainer-test"><div class="select-test">2026年订单</div></div>
     <div class="listContent-test"></div><button class="nextBtn-test"></button>`;
   renderPage(1, `${parent}${item("1000000000000002", "10.00", true)}`);
 });
@@ -73,34 +73,30 @@ afterEach(() => {
 });
 
 describe("JD page export workflow", () => {
-  it("reads year options even when React DOM nodes contain circular properties", async () => {
-    const menu = document.querySelector(".selectContainer-test");
+  it("requires manual year selection and does not open the year menu", async () => {
     const toggle = document.querySelector(".select-test");
-    if (!menu || !toggle) throw new Error("Missing menu");
-    toggle.addEventListener("click", () => {
-      const existing = menu.querySelector(".selectList-test");
-      if (existing) {
-        existing.remove();
-        return;
-      }
-      const options = document.createElement("div");
-      options.className = "selectList-test";
-      options.innerHTML =
-        '<div class="item-test">今年内订单</div><div class="item-test">2025年订单</div>';
-      for (const node of options.children) {
-        Object.defineProperty(node, "__reactFiber", {
-          enumerable: true,
-          value: { stateNode: node },
-        });
-      }
-      menu.append(options);
-    });
-    const periods = await discoverPeriods(new AbortController().signal);
-    expect(periods.map((period) => period.label)).toEqual([
-      "今年内订单",
-      "2025年订单",
-    ]);
-    expect(menu.querySelector(".selectList-test")).toBeNull();
+    if (!toggle) throw new Error("Missing menu");
+    const clicked = vi.fn();
+    toggle.addEventListener("click", clicked);
+    toggle.textContent = "近3个月订单";
+    await expect(
+      collectCurrentPeriod(new AbortController().signal, () => {}),
+    ).rejects.toThrow("先在京东页面选择");
+    expect(clicked).not.toHaveBeenCalled();
+    expect(toggle.textContent).toBe("近3个月订单");
+  });
+
+  it("requires the first page without navigating backward", async () => {
+    renderPage(2, item("1000000000000002", "10.00"));
+    const next = document.querySelector(".nextBtn-test");
+    if (!next) throw new Error("Missing next button");
+    const clicked = vi.fn();
+    next.addEventListener("click", clicked);
+    await expect(
+      collectCurrentPeriod(new AbortController().signal, () => {}),
+    ).rejects.toThrow("回到第一页");
+    expect(clicked).not.toHaveBeenCalled();
+    expect(document.querySelector(".activePage-test")?.textContent).toBe("2");
   });
 
   it("waits for both the order request and stable DOM before completing a cross-page group", async () => {
@@ -114,11 +110,7 @@ describe("JD page export workflow", () => {
       );
     });
     const progress = vi.fn();
-    const task = collectPeriod(
-      { label: "今年内订单", year: 2026, before: null },
-      new AbortController().signal,
-      progress,
-    );
+    const task = collectCurrentPeriod(new AbortController().signal, progress);
     await vi.advanceTimersByTimeAsync(2000);
     const files = await task;
     expect(files[0]).toMatchObject({
@@ -129,6 +121,9 @@ describe("JD page export workflow", () => {
     });
     expect(progress).toHaveBeenCalledTimes(2);
     expect(files[0]?.csv).toContain('"2","10.00","一致"');
+    expect(document.querySelector(".select-test")?.textContent).toBe(
+      "2026年订单",
+    );
   });
 
   it("does not accept a page-number change before the order response, and can cancel", async () => {
@@ -138,14 +133,41 @@ describe("JD page export workflow", () => {
       renderPage(2, item("1000000000000003", "0.00", true)),
     );
     const controller = new AbortController();
-    const task = collectPeriod(
-      { label: "今年内订单", year: 2026, before: null },
-      controller.signal,
-      () => {},
-    );
+    const task = collectCurrentPeriod(controller.signal, () => {});
     const rejected = expect(task).rejects.toThrow("用户取消");
     await vi.advanceTimersByTimeAsync(2000);
     controller.abort(new DOMException("用户取消", "AbortError"));
     await rejected;
+  });
+
+  it("rejects year changes during pagination", async () => {
+    const next = document.querySelector(".nextBtn-test");
+    const period = document.querySelector(".select-test");
+    if (!next || !period) throw new Error("Missing controls");
+    next.addEventListener("click", () => {
+      period.textContent = "2025年订单";
+      renderPage(2, item("1000000000000003", "0.00", true));
+      notifyResource?.();
+    });
+    const task = collectCurrentPeriod(new AbortController().signal, () => {});
+    const rejected = expect(task).rejects.toThrow("订单筛选或总页数");
+    await vi.advanceTimersByTimeAsync(1000);
+    await rejected;
+  });
+
+  it("generates a header-only CSV for an explicitly empty selected year", async () => {
+    list().innerHTML = '<div class="emptyState-test">暂无订单</div>';
+    const files = await collectCurrentPeriod(
+      new AbortController().signal,
+      () => {},
+    );
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatchObject({
+      year: 2026,
+      orders: 0,
+      splitGroups: 0,
+      mismatches: 0,
+    });
+    expect(files[0]?.csv.split("\r\n")).toHaveLength(2);
   });
 });

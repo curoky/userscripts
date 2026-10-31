@@ -3,31 +3,26 @@ import {
   assertAllOrders,
   type PageSnapshot,
   type Period,
-  parsePeriods,
+  parsePeriod,
   readPage,
   selectors,
 } from "./order-page.js";
 import { OrderLedger } from "./orders.js";
 
-function checkSignal(signal: AbortSignal): void {
-  signal.throwIfAborted();
-}
-
-async function waitFor<T>(
-  read: () => T | undefined,
+async function waitForPage(
+  read: () => PageSnapshot | undefined,
   signal: AbortSignal,
-  stableMs = 0,
-): Promise<T> {
+): Promise<PageSnapshot> {
   return new Promise((resolve, reject) => {
     let key = "";
     let stableSince = 0;
     let lastError = "京东页面未响应";
     const started = performance.now();
-    const finish = (error?: unknown, value?: T) => {
+    const finish = (error?: unknown, value?: PageSnapshot) => {
       clearInterval(timer);
       signal.removeEventListener("abort", abort);
       if (error) reject(error);
-      else resolve(value as T);
+      else if (value) resolve(value);
     };
     const abort = () => finish(signal.reason);
     const tick = () => {
@@ -38,14 +33,10 @@ async function waitFor<T>(
         return;
       }
       try {
-        checkSignal(signal);
+        signal.throwIfAborted();
         const value = read();
         if (value === undefined) {
           key = "";
-          return;
-        }
-        if (stableMs === 0) {
-          finish(undefined, value);
           return;
         }
         const nextKey = JSON.stringify(value);
@@ -53,8 +44,7 @@ async function waitFor<T>(
           key = nextKey;
           stableSince = performance.now();
         }
-        if (performance.now() - stableSince >= stableMs)
-          finish(undefined, value);
+        if (performance.now() - stableSince >= 350) finish(undefined, value);
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
         key = "";
@@ -67,46 +57,15 @@ async function waitFor<T>(
   });
 }
 
-function menu(): Element {
-  const element = document.querySelector(selectors.menu);
-  if (!element) throw new Error("未找到京东订单年度筛选菜单");
-  return element;
-}
-
-async function openMenu(signal: AbortSignal): Promise<HTMLElement[]> {
-  let options = Array.from(
-    menu().querySelectorAll<HTMLElement>(selectors.periodOption),
-  );
-  if (!options.length) {
-    menu().querySelector<HTMLElement>(selectors.selectedPeriod)?.click();
-    options = await waitFor(() => {
-      const items = Array.from(
-        menu().querySelectorAll<HTMLElement>(selectors.periodOption),
-      );
-      return items.length ? items : undefined;
-    }, signal);
-  }
-  return options;
-}
-
-export async function discoverPeriods(signal: AbortSignal): Promise<Period[]> {
-  assertAllOrders();
-  const options = await openMenu(signal);
-  const periods = parsePeriods(
-    options.map((option) => option.textContent?.trim() ?? ""),
-    new Date().getFullYear(),
-  );
-  menu().querySelector<HTMLElement>(selectors.selectedPeriod)?.click();
-  return periods;
-}
-
 // 监听京东自身的订单请求完成时间，不读取请求体、响应、签名或登录凭据。
-async function changePage(
-  action: () => void,
-  accept: (snapshot: PageSnapshot) => boolean,
+async function nextPage(
+  previous: PageSnapshot,
   signal: AbortSignal,
 ): Promise<PageSnapshot> {
-  checkSignal(signal);
+  signal.throwIfAborted();
+  const next = document.querySelector<HTMLButtonElement>(selectors.next);
+  if (!next || next.disabled)
+    throw new Error("尚未到最后一页，但下一页按钮不可用");
   const started = performance.now();
   let requestComplete = false;
   const observer = new PerformanceObserver((list) => {
@@ -122,56 +81,16 @@ async function changePage(
   });
   observer.observe({ type: "resource" });
   try {
-    action();
-    return await waitFor(
-      () => {
-        assertAllOrders();
-        if (!requestComplete) return undefined;
-        const snapshot = readPage();
-        return accept(snapshot) ? snapshot : undefined;
-      },
-      signal,
-      350,
-    );
+    next.click();
+    return await waitForPage(() => {
+      assertAllOrders();
+      if (!requestComplete) return undefined;
+      const snapshot = readPage();
+      return snapshot.page === previous.page + 1 ? snapshot : undefined;
+    }, signal);
   } finally {
     observer.disconnect();
   }
-}
-
-async function firstPage(
-  period: Period,
-  signal: AbortSignal,
-): Promise<PageSnapshot> {
-  const current = await waitFor(
-    () => {
-      assertAllOrders();
-      return readPage();
-    },
-    signal,
-    350,
-  );
-  if (current.period !== period.label) {
-    const options = await openMenu(signal);
-    const option = options.find(
-      (item) => item.textContent?.trim() === period.label,
-    );
-    if (!option) throw new Error(`京东未提供年度筛选：${period.label}`);
-    return changePage(
-      () => option.click(),
-      (snapshot) => snapshot.period === period.label && snapshot.page === 1,
-      signal,
-    );
-  }
-  if (current.page === 1) return current;
-  const one = Array.from(
-    document.querySelectorAll<HTMLElement>(selectors.page),
-  ).find((item) => item.textContent?.trim() === "1");
-  if (!one) throw new Error("未找到第一页按钮，请手动返回第一页后重试");
-  return changePage(
-    () => one.click(),
-    (snapshot) => snapshot.page === 1 && snapshot.period === period.label,
-    signal,
-  );
 }
 
 function validateYear(snapshot: PageSnapshot, period: Period): void {
@@ -185,17 +104,22 @@ function validateYear(snapshot: PageSnapshot, period: Period): void {
   }
 }
 
-export async function collectPeriod(
-  period: Period,
+export async function collectCurrentPeriod(
   signal: AbortSignal,
   progress: (message: string) => void,
 ): Promise<YearCsv[]> {
+  signal.throwIfAborted();
+  assertAllOrders();
+  let snapshot = readPage();
+  const period = parsePeriod(snapshot.period, new Date().getFullYear());
+  if (snapshot.page !== 1) {
+    throw new Error("请先在京东页面回到第一页，再导出当前年度");
+  }
   const ledger = new OrderLedger();
-  let snapshot = await firstPage(period, signal);
   const totalPages = snapshot.totalPages;
   const visited = new Set<string>();
   for (let page = 1; page <= totalPages; page++) {
-    checkSignal(signal);
+    signal.throwIfAborted();
     assertAllOrders();
     if (
       snapshot.page !== page ||
@@ -214,14 +138,7 @@ export async function collectPeriod(
       `${period.label}：第 ${page}/${totalPages} 页，已读取 ${ledger.orders.size} 个订单`,
     );
     if (page === totalPages) break;
-    const next = document.querySelector<HTMLButtonElement>(selectors.next);
-    if (!next || next.disabled)
-      throw new Error("尚未到最后一页，但下一页按钮不可用");
-    snapshot = await changePage(
-      () => next.click(),
-      (result) => result.page === page + 1 && result.period === period.label,
-      signal,
-    );
+    snapshot = await nextPage(snapshot, signal);
   }
   const files = exportYears(ledger);
   if (!files.length && period.year !== null) {
