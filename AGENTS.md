@@ -8,6 +8,7 @@
 
 - [GitHub Trending Blacklist](src/github-trending-blacklist/AGENTS.md)：隐藏 GitHub Trending 中不想再看到的 repository。
 - [GitHub Trending Language Priorities](src/github-trending-language-priorities/AGENTS.md)：将常用编程语言移动到 GitHub Trending 语言菜单顶部。
+- [JD Bill Exporter](src/jd-bill-exporter/AGENTS.md)：按年导出京东订单 CSV，保留拆单父子关系并避免重复汇总。
 
 ## Commands
 

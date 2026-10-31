@@ -1,0 +1,83 @@
+/* Bundled as a text asset into the single userscript. */
+#jd-bill-exporter {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 99999;
+  width: min(370px, calc(100vw - 40px));
+  color: #222;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  box-shadow: 0 5px 24px #0002;
+  font:
+    14px / 1.6 system-ui,
+    sans-serif;
+}
+
+#jd-bill-exporter summary {
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#jd-bill-exporter .jd-export-body {
+  padding: 0 14px 14px;
+}
+
+#jd-bill-exporter select {
+  width: 100%;
+  margin: 4px 0 10px;
+  padding: 6px;
+  color: #222;
+  background: #fff;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+}
+
+#jd-bill-exporter .jd-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#jd-bill-exporter button {
+  padding: 5px 9px;
+  color: #222;
+  background: #fafafa;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#jd-bill-exporter button[data-action="start"] {
+  color: white;
+  background: #c92324;
+  border-color: #c92324;
+}
+
+#jd-bill-exporter button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#jd-bill-exporter p {
+  margin: 8px 0;
+}
+
+#jd-bill-exporter .jd-export-hint {
+  color: #666;
+  font-size: 12px;
+}
+
+#jd-bill-exporter .jd-export-downloads {
+  display: grid;
+  gap: 6px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+#jd-bill-exporter a {
+  color: #a31617;
+  text-decoration: underline;
+}
